@@ -36,6 +36,7 @@ def train(args):
         notes="Fine-tune Models on ESC50.",
         tags=["Environmental Sound Classification", "Fine-Tuning"],
         config=args,
+        mode='offline',
         name=args.experiment_name
     )
 
@@ -134,10 +135,11 @@ def train(args):
 
             # Update Model
             loss.backward()
-            optimizer.step()
-            optimizer_mel.step()
+            optimizer.step()            
             optimizer.zero_grad()
-            optimizer_mel.zero_grad()
+            if epoch > 30:
+                optimizer_mel.step()
+                optimizer_mel.zero_grad()
         # Update learning rate
         scheduler.step()
 
