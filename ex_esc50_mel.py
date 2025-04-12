@@ -111,7 +111,8 @@ def train(args):
             x, f, y = batch
             bs = x.size(0)
             x, y = x.to(device), y.to(device)
-            x = _mel_forward(x, mel)
+            x = mel(x)
+            # x = _mel_forward(x, mel)
 
             if args.mixup_alpha:
                 rn_indices, lam = mixup(bs, args.mixup_alpha)
