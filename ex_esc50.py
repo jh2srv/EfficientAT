@@ -11,7 +11,7 @@ import torch.nn.functional as F
 from datasets.esc50 import get_test_set, get_training_set
 from models.mn.model import get_model as get_mobilenet
 from models.dymn.model import get_model as get_dymn
-from models.preprocess import AugmentMelSTFT
+from models.preprocess import AugmentMelSTFT, AugmentMelSTFT_v2
 from helpers.init import worker_init_fn
 from helpers.utils import NAME_TO_WIDTH, exp_warmup_linear_down, mixup
 
@@ -31,7 +31,7 @@ def train(args):
     device = torch.device('cuda') if args.cuda and torch.cuda.is_available() else torch.device('cpu')
 
     # model to preprocess waveform into mel spectrograms
-    mel = AugmentMelSTFT(n_mels=args.n_mels,
+    mel = AugmentMelSTFT_v2(n_mels=args.n_mels,
                          sr=args.resample_rate,
                          win_length=args.window_size,
                          hopsize=args.hop_size,
