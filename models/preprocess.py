@@ -110,7 +110,7 @@ class AugmentMelSTFT_v2(nn.Module):
         mel_basis = torch.nn.functional.pad(mel_basis, (0, 1), mode='constant', value=0)                                    
 
         self.filter_banks = nn.Parameter(mel_basis,
-                                        requires_grad=False) # <- can we update this value with gradient descent?))
+                                        requires_grad=True) # <- can we update this value with gradient descent?))
 
 
     def forward(self, x):
