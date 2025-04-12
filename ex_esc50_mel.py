@@ -16,16 +16,16 @@ from helpers.init import worker_init_fn
 from helpers.utils import NAME_TO_WIDTH, exp_warmup_linear_down, mixup
 
 
-class MelModel(torch.nn):
-    def __init__(self, model, mel):
-        super().__init__()
-        self.model = model
-        self.mel = mel
+# class MelModel(torch.nn):
+#     def __init__(self, model, mel):
+#         super().__init__()
+#         self.model = model
+#         self.mel = mel
 
-    def forward(self, x):
+#     def forward(self, x):
 
 
-        return self.linear_layer_stack(x)        
+#         return self.linear_layer_stack(x)        
 
 def train(args):
     # Train Models for Acoustic Scene Classification
