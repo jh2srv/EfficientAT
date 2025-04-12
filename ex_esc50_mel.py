@@ -16,16 +16,23 @@ from helpers.init import worker_init_fn
 from helpers.utils import NAME_TO_WIDTH, exp_warmup_linear_down, mixup
 
 
-# class MelModel(torch.nn):
-#     def __init__(self, model, mel):
-#         super().__init__()
-#         self.model = model
-#         self.mel = mel
+class MelModel(torch.nn):
+    def __init__(self, model, mel):
+        super().__init__()
+        self.model = model
+        self.mel = mel
 
-#     def forward(self, x):
+    def forward(self, x):
+        old_shape = x.size()
+        # reshape from: batch,1,samples -> batch,samples (1 is number of channels)
+        x = x.reshape(-1, old_shape[2])
+        x = self.mel(x)
+        x = x.reshape(old_shape[0], old_shape[1], x.shape[1], x.shape[2])
+
+        x = self.model(x)
 
 
-#         return self.linear_layer_stack(x)        
+        return x      
 
 def train(args):
     # Train Models for Acoustic Scene Classification
@@ -57,20 +64,22 @@ def train(args):
                          )
     mel.to(device)
 
+
     # load prediction model
     model_name = args.model_name
     pretrained_name = model_name if args.pretrained else None
     width = NAME_TO_WIDTH(model_name) if model_name and args.pretrained else args.model_width
     if model_name.startswith("dymn"):
-        model = get_dymn(width_mult=width, pretrained_name=pretrained_name,
+        _model = get_dymn(width_mult=width, pretrained_name=pretrained_name,
                          pretrain_final_temp=args.pretrain_final_temp,
                          num_classes=50)
     else:
-        model = get_mobilenet(width_mult=width, pretrained_name=pretrained_name,
+        _model = get_mobilenet(width_mult=width, pretrained_name=pretrained_name,
                               head_type=args.head_type, se_dims=args.se_dims,
                               num_classes=50)
+    _model.to(device)
+    model = MelModel(_model, mel)
     model.to(device)
-
     # dataloader
     dl = DataLoader(dataset=get_training_set(resample_rate=args.resample_rate,
                                              roll=False if args.no_roll else True,
@@ -91,7 +100,7 @@ def train(args):
     # optimizer & scheduler
     lr = args.lr
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    optimizer_mel = torch.optim.Adam(mel.parameters(), lr=args.lr)
+    
     # phases of lr schedule: exponential increase, constant lr, linear decrease, fine-tune
     schedule_lambda = \
         exp_warmup_linear_down(args.warm_up_len, args.ramp_down_len, args.ramp_down_start, args.last_lr_value)
@@ -101,7 +110,6 @@ def train(args):
     accuracy, val_loss = float('NaN'), float('NaN')
 
     for epoch in range(args.n_epochs):
-        mel.train()
         model.train()
         train_stats = dict(train_loss=list())
         pbar = tqdm(dl)
@@ -111,22 +119,20 @@ def train(args):
             x, f, y = batch
             bs = x.size(0)
             x, y = x.to(device), y.to(device)
-            x = mel(x)
-            # x = _mel_forward(x, mel)
 
-            if args.mixup_alpha:
-                rn_indices, lam = mixup(bs, args.mixup_alpha)
-                lam = lam.to(x.device)
-                x = x * lam.reshape(bs, 1, 1, 1) + \
-                    x[rn_indices] * (1. - lam.reshape(bs, 1, 1, 1))
-                y_hat, _ = model(x)
-                samples_loss = (F.cross_entropy(y_hat, y, reduction="none") * lam.reshape(bs) +
-                                F.cross_entropy(y_hat, y[rn_indices], reduction="none") * (
-                                            1. - lam.reshape(bs)))
+            # if args.mixup_alpha:
+            #     rn_indices, lam = mixup(bs, args.mixup_alpha)
+            #     lam = lam.to(x.device)
+            #     x = x * lam.reshape(bs, 1, 1, 1) + \
+            #         x[rn_indices] * (1. - lam.reshape(bs, 1, 1, 1))
+            #     y_hat, _ = model(x)
+            #     samples_loss = (F.cross_entropy(y_hat, y, reduction="none") * lam.reshape(bs) +
+            #                     F.cross_entropy(y_hat, y[rn_indices], reduction="none") * (
+            #                                 1. - lam.reshape(bs)))
 
-            else:
-                y_hat, _ = model(x)
-                samples_loss = F.cross_entropy(y_hat, y, reduction="none")
+            # else:
+            y_hat, _ = model(x)
+            samples_loss = F.cross_entropy(y_hat, y, reduction="none")
 
             # loss
             loss = samples_loss.mean()
@@ -138,14 +144,11 @@ def train(args):
             loss.backward()
             optimizer.step()            
             optimizer.zero_grad()
-            if epoch > 20:
-                optimizer_mel.step()
-                optimizer_mel.zero_grad()
         # Update learning rate
         scheduler.step()
 
         # evaluate
-        accuracy, val_loss = _test(model, mel, eval_dl, device)
+        accuracy, val_loss = _test(model.model, model.mel, eval_dl, device)
 
         # log train and validation statistics
         wandb.log({"train_loss": np.mean(train_stats['train_loss']),
@@ -164,6 +167,7 @@ def train(args):
 
 def _mel_forward(x, mel):
     old_shape = x.size()
+    # reshape from: batch,1,samples -> batch,samples (1 is number of channels)
     x = x.reshape(-1, old_shape[2])
     x = mel(x)
     x = x.reshape(old_shape[0], old_shape[1], x.shape[1], x.shape[2])
