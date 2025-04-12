@@ -91,7 +91,7 @@ def train(args):
     # optimizer & scheduler
     lr = args.lr
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    optimizer_mel = torch.optim.Adam(mel.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    optimizer_mel = torch.optim.Adam(mel.parameters(), lr=args.lr)
     # phases of lr schedule: exponential increase, constant lr, linear decrease, fine-tune
     schedule_lambda = \
         exp_warmup_linear_down(args.warm_up_len, args.ramp_down_len, args.ramp_down_start, args.last_lr_value)
@@ -137,7 +137,7 @@ def train(args):
             loss.backward()
             optimizer.step()            
             optimizer.zero_grad()
-            if epoch > 30:
+            if epoch > 20:
                 optimizer_mel.step()
                 optimizer_mel.zero_grad()
         # Update learning rate
