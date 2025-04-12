@@ -38,7 +38,9 @@ class AugmentMelSTFT(nn.Module):
             self.timem = torchaudio.transforms.TimeMasking(timem, iid_masks=True)
 
     def forward(self, x):
-        x = nn.functional.conv1d(x.unsqueeze(1), self.preemphasis_coefficient).squeeze(1)
+        # preemphasis: high band filter with 5.9 dB per octave
+        # x = nn.functional.conv1d(x.unsqueeze(1), self.preemphasis_coefficient).squeeze(1)
+        
         x = torch.stft(x, self.n_fft, hop_length=self.hopsize, win_length=self.win_length,
                        center=True, normalized=False, window=self.window, return_complex=False)
         x = (x ** 2).sum(dim=-1)  # power mag
@@ -64,4 +66,5 @@ class AugmentMelSTFT(nn.Module):
 
         melspec = (melspec + 4.5) / 5.  # fast normalization
 
+        melspec = melspec[...,0:-1]
         return melspec
