@@ -107,8 +107,7 @@ class AugmentMelSTFT_v2(nn.Module):
         mel_basis, _ = torchaudio.compliance.kaldi.get_mel_banks(self.n_mels,  self.n_fft, self.sr,
                                         fmin, fmax, vtln_low=100.0, vtln_high=-500., vtln_warp_factor=1.0)
         
-        mel_basis = torch.as_tensor(torch.nn.functional.pad(mel_basis, (0, 1), mode='constant', value=0),
-                                    device=x.device)
+        mel_basis = torch.nn.functional.pad(mel_basis, (0, 1), mode='constant', value=0)                                    
 
         self.filter_banks = nn.Parameter(mel_basis,
                                         requires_grad=False) # <- can we update this value with gradient descent?))
