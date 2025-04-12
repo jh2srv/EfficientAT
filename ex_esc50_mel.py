@@ -16,6 +16,17 @@ from helpers.init import worker_init_fn
 from helpers.utils import NAME_TO_WIDTH, exp_warmup_linear_down, mixup
 
 
+class MelModel(torch.nn):
+    def __init__(self, model, mel):
+        super().__init__()
+        self.model = model
+        self.mel = mel
+
+    def forward(self, x):
+
+
+        return self.linear_layer_stack(x)        
+
 def train(args):
     # Train Models for Acoustic Scene Classification
 
@@ -31,7 +42,7 @@ def train(args):
     device = torch.device('cuda') if args.cuda and torch.cuda.is_available() else torch.device('cpu')
 
     # model to preprocess waveform into mel spectrograms
-    mel = AugmentMelSTFT(n_mels=args.n_mels,
+    mel = AugmentMelSTFT_v2(n_mels=args.n_mels,
                          sr=args.resample_rate,
                          win_length=args.window_size,
                          hopsize=args.hop_size,
@@ -79,6 +90,7 @@ def train(args):
     # optimizer & scheduler
     lr = args.lr
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    optimizer_mel = torch.optim.Adam(mel.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     # phases of lr schedule: exponential increase, constant lr, linear decrease, fine-tune
     schedule_lambda = \
         exp_warmup_linear_down(args.warm_up_len, args.ramp_down_len, args.ramp_down_start, args.last_lr_value)
@@ -123,7 +135,9 @@ def train(args):
             # Update Model
             loss.backward()
             optimizer.step()
+            optimizer_mel.step()
             optimizer.zero_grad()
+            optimizer_mel.zero_grad()
         # Update learning rate
         scheduler.step()
 
@@ -139,6 +153,7 @@ def train(args):
         # remove previous model (we try to not flood your hard disk) and save latest model
         if name is not None:
             os.remove(os.path.join(wandb.run.dir, name))
+            os.remove(os.path.join(wandb.run.dir, 'mel_' + name))
         name = f"mn{str(width).replace('.', '')}_esc50_epoch_{epoch}_acc_{int(round(accuracy*1000))}.pt"
         torch.save(model.state_dict(), os.path.join(wandb.run.dir, name))
         torch.save(mel.state_dict(), os.path.join(wandb.run.dir, 'mel_' + name))
