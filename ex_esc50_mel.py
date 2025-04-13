@@ -85,6 +85,11 @@ def train(args):
                               head_type=args.head_type, se_dims=args.se_dims,
                               num_classes=50)
     _model.to(device)
+    if args.model_local != '':
+        state_dict = torch.load(f = args.model_local,  map_location=device.type)
+        # state_dict = torch.load(f=pretrained_path)
+        _model.load_state_dict(state_dict)
+
     model = MelModel(_model, mel)
     model.to(device)
     # dataloader
@@ -106,12 +111,13 @@ def train(args):
 
     # optimizer & scheduler
     lr = args.lr
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    # optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    optimizer = torch.optim.SGD(model.parameters(), lr=1e-6)
     
     # phases of lr schedule: exponential increase, constant lr, linear decrease, fine-tune
-    schedule_lambda = \
-        exp_warmup_linear_down(args.warm_up_len, args.ramp_down_len, args.ramp_down_start, args.last_lr_value)
-    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, schedule_lambda)
+    # schedule_lambda = \
+    #     exp_warmup_linear_down(args.warm_up_len, args.ramp_down_len, args.ramp_down_start, args.last_lr_value)
+    # scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, schedule_lambda)
 
     name = None
     accuracy, val_loss = float('NaN'), float('NaN')
@@ -152,7 +158,7 @@ def train(args):
             optimizer.step()            
             optimizer.zero_grad()
         # Update learning rate
-        scheduler.step()
+        # scheduler.step()
 
         # evaluate
         accuracy, val_loss = _test(model.model, model.mel, eval_dl, device)
@@ -251,6 +257,9 @@ if __name__ == '__main__':
     parser.add_argument('--fmax', type=int, default=None)
     parser.add_argument('--fmin_aug_range', type=int, default=10)
     parser.add_argument('--fmax_aug_range', type=int, default=2000)
+
+    # custom, different to original repo
+    parser.add_argument('--model_local', type=str, default='')
 
     args = parser.parse_args()
     train(args)
