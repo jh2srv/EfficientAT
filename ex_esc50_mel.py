@@ -23,11 +23,13 @@ class MelModel(nn.Module):
         super().__init__()
         self.model = model
         self.mel = mel
-        # print(self.model)
 
         for param in self.mel.parameters():
             param.requires_grad = True
 
+        # for param in self.parameters():
+        #     if not param.requires_grad:
+        #         print(param.shape, param)
 
     def forward(self, x):
         old_shape = x.size()
@@ -35,9 +37,7 @@ class MelModel(nn.Module):
         x = x.reshape(-1, old_shape[2])
         x = self.mel(x)
         x = x.reshape(old_shape[0], old_shape[1], x.shape[1], x.shape[2])
-
         x = self.model(x)
-
 
         return x        
 
@@ -92,6 +92,7 @@ def train(args):
 
     model = MelModel(_model, mel)
     model.to(device)
+
     # dataloader
     dl = DataLoader(dataset=get_training_set(resample_rate=args.resample_rate,
                                              roll=False if args.no_roll else True,
