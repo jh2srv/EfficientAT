@@ -112,7 +112,7 @@ def train(args):
     # optimizer & scheduler
     lr = args.lr
     # optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    optimizer = torch.optim.SGD(model.parameters(), lr=1e-6)
+    optimizer = torch.optim.SGD(model.parameters(), lr=1e-8)
     
     # phases of lr schedule: exponential increase, constant lr, linear decrease, fine-tune
     # schedule_lambda = \
