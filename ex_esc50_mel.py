@@ -16,11 +16,18 @@ from helpers.init import worker_init_fn
 from helpers.utils import NAME_TO_WIDTH, exp_warmup_linear_down, mixup
 
 
-class MelModel(torch.nn):
+from torch import nn
+
+class MelModel(nn.Module):
     def __init__(self, model, mel):
         super().__init__()
         self.model = model
         self.mel = mel
+        # print(self.model)
+
+        for param in self.mel.parameters():
+            param.requires_grad = True
+
 
     def forward(self, x):
         old_shape = x.size()
@@ -32,7 +39,7 @@ class MelModel(torch.nn):
         x = self.model(x)
 
 
-        return x      
+        return x        
 
 def train(args):
     # Train Models for Acoustic Scene Classification

@@ -108,9 +108,9 @@ class AugmentMelSTFT_v2(nn.Module):
                                         fmin, fmax, vtln_low=100.0, vtln_high=-500., vtln_warp_factor=1.0)
         
         mel_basis = torch.nn.functional.pad(mel_basis, (0, 1), mode='constant', value=0)                                    
-
+        # mel_basis = mel_basis.to(torch.float16)
         self.filter_banks = nn.Parameter(mel_basis,
-                                        requires_grad=True) # <- can we update this value with gradient descent?))
+                                        requires_grad=False) # <- can we update this value with gradient descent?))
 
 
     def forward(self, x):
@@ -119,6 +119,7 @@ class AugmentMelSTFT_v2(nn.Module):
         
         x = torch.stft(x, self.n_fft, hop_length=self.hopsize, win_length=self.win_length,
                        center=True, normalized=False, window=self.window, return_complex=False)
+        
         x = (x ** 2).sum(dim=-1)  # power mag
         fmin = self.fmin + torch.randint(self.fmin_aug_range, (1,)).item()
         fmax = self.fmax + self.fmax_aug_range // 2 - torch.randint(self.fmax_aug_range, (1,)).item()

@@ -25,6 +25,7 @@ def train(args):
         notes="Fine-tune Models on ESC50.",
         tags=["Environmental Sound Classification", "Fine-Tuning"],
         config=args,
+        mode='offline',
         name=args.experiment_name
     )
 
