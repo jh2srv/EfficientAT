@@ -3,8 +3,8 @@ from torch.utils.data import Dataset as TorchDataset
 import torch
 import numpy as np
 import pandas as pd
-import librosa
-
+import torchaudio
+import torchaudio.functional as F
 from datasets.helpers.audiodatasets import PreprocessDataset, get_roll_func
 
 # specify ESC50 location in 'dataset_dir'
@@ -15,7 +15,7 @@ from datasets.helpers.audiodatasets import PreprocessDataset, get_roll_func
 # follow the instructions here to get these 3 files:
 # https://github.com/kkoutini/PaSST/tree/main/esc50
 
-dataset_dir = '/content/EfficientAT/audioset_hdf5s/esc50/'
+dataset_dir = 'esc50/'
 
 assert dataset_dir is not None, "Specify ESC50 dataset location in variable 'dataset_dir'. " \
                                 "Check out the Readme file for further instructions. " \
@@ -112,9 +112,27 @@ class AudioSetDataset(TorchDataset):
         """
         row = self.df.iloc[index]
 
-        waveform, _ = librosa.load(self.audiopath + row.filename, sr=self.resample_rate, mono=True)
+        # waveform, _ = librosa.load(self.audiopath + row.filename, sr=self.resample_rate, mono=True)
+        # Replace librosa
+        waveform, sample_rate = torchaudio.load(self.audiopath + row.filename)
+        waveform = waveform[0, :] # keep dimensions as in librosa 
+        waveform = F.resample(
+            waveform,
+            sample_rate,
+            self.resample_rate,
+            lowpass_filter_width=16,
+            rolloff=0.85,
+            resampling_method="sinc_interp_kaiser",
+            beta=8.555504641634386,
+        )
+
+        waveform = waveform.numpy()
+        
+        
+        
         if self.gain_augment:
             waveform = pydub_augment(waveform, self.gain_augment)
+            
         waveform = pad_or_truncate(waveform, self.clip_length)
         target = np.zeros(self.classes_num)
         target[row.target] = 1

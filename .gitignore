@@ -2,3 +2,7 @@ __pycache__
 resources/*.pt
 resources/*.npy
 .idea
+wandb/
+.ipynb_checkpoints/
+esc50/
+*.ipynb
