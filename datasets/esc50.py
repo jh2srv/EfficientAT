@@ -113,8 +113,8 @@ class AudioSetDataset(TorchDataset):
         row = self.df.iloc[index]
 
         # waveform, _ = librosa.load(self.audiopath + row.filename, sr=self.resample_rate, mono=True)
-        # Replace librosa
-        waveform, sample_rate = torchaudio.load(self.audiopath + row.filename)
+        # Replace librosa, use soundfile, as it is the fastest one
+        waveform, sample_rate = torchaudio.load(self.audiopath + row.filename, backend='soundfile')
         waveform = waveform[0, :] # keep dimensions as in librosa 
         waveform = F.resample(
             waveform,
