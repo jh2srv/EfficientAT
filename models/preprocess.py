@@ -237,9 +237,9 @@ class AugmentMelSTFT_part2(nn.Module):
         melspec = torch.matmul(self.filter_banks, x)
         melspec = (melspec + 0.00001).log()
 
-        if self.training:
-            melspec = self.freqm(melspec)
-            melspec = self.timem(melspec)
+        # if self.training:
+        #     melspec = self.freqm(melspec)
+        #     melspec = self.timem(melspec)
 
         melspec = (melspec + 4.5) / 5.  # fast normalization
         return melspec

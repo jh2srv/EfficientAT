@@ -37,9 +37,9 @@ class MelModel(nn.Module):
         # reshape from: batch,1,samples -> batch,samples (1 is number of channels)
         x = x.reshape(-1, old_shape[2])
         x = self.stft(x)
+        x = x.unsqueeze(1)
         x = self.mel(x)
-        x = x.reshape(old_shape[0], old_shape[1], x.shape[1], x.shape[2])
-        x = self.model(x)
+        x = self.model(x)       
         return x        
 
 def train(args):
@@ -127,7 +127,7 @@ def train(args):
                          num_workers=args.num_workers,
                          batch_size=args.batch_size)
                          
-    ORIGINAL = False
+    ORIGINAL = True
     # optimizer & scheduler
 
     if ORIGINAL:
