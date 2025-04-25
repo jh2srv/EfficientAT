@@ -26,7 +26,7 @@ class MelModel(nn.Module):
         self.stft = stft
 
         for param in self.mel.parameters():
-            param.requires_grad = False
+            param.requires_grad = True
 
         # for param in self.parameters():
         #     if not param.requires_grad:
@@ -126,16 +126,19 @@ def train(args):
                          worker_init_fn=worker_init_fn,
                          num_workers=args.num_workers,
                          batch_size=args.batch_size)
-
+                         
+    ORIGINAL = False
     # optimizer & scheduler
-    lr = args.lr
-    # optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    optimizer = torch.optim.SGD(model.parameters(), lr=1e-8)
-    
-    # phases of lr schedule: exponential increase, constant lr, linear decrease, fine-tune
-    # schedule_lambda = \
-    #     exp_warmup_linear_down(args.warm_up_len, args.ramp_down_len, args.ramp_down_start, args.last_lr_value)
-    # scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, schedule_lambda)
+
+    if ORIGINAL:
+        lr = args.lr
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+        # phases of lr schedule: exponential increase, constant lr, linear decrease, fine-tune
+        schedule_lambda = \
+            exp_warmup_linear_down(args.warm_up_len, args.ramp_down_len, args.ramp_down_start, args.last_lr_value)
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, schedule_lambda)
+    else:
+        optimizer = torch.optim.SGD(model.parameters(), lr=1e-9)
 
     name = None
     accuracy, val_loss = float('NaN'), float('NaN')
@@ -176,10 +179,11 @@ def train(args):
             optimizer.step()            
             optimizer.zero_grad()
         # Update learning rate
-        # scheduler.step()
+        if ORIGINAL:        
+            scheduler.step()
 
         # evaluate
-        accuracy, val_loss = _test(model.model, model.mel, eval_dl, device)
+        accuracy, val_loss = _test(model, eval_dl, device)
 
         # log train and validation statistics
         wandb.log({"train_loss": np.mean(train_stats['train_loss']),
@@ -205,9 +209,8 @@ def _mel_forward(x, mel):
     return x
 
 
-def _test(model, mel, eval_loader, device):
+def _test(model, eval_loader, device):
     model.eval()
-    mel.eval()
 
     targets = []
     outputs = []
@@ -219,7 +222,6 @@ def _test(model, mel, eval_loader, device):
         x = x.to(device)
         y = y.to(device)
         with torch.no_grad():
-            x = _mel_forward(x, mel)
             y_hat, _ = model(x)
         targets.append(y.cpu().numpy())
         outputs.append(y_hat.float().cpu().numpy())
@@ -249,7 +251,7 @@ if __name__ == '__main__':
     parser.add_argument('--model_width', type=float, default=1.0)
     parser.add_argument('--head_type', type=str, default="mlp")
     parser.add_argument('--se_dims', type=str, default="c")
-    parser.add_argument('--n_epochs', type=int, default=80)
+    parser.add_argument('--n_epochs', type=int, default=5)
     parser.add_argument('--mixup_alpha', type=float, default=0.3)
     parser.add_argument('--no_roll', action='store_true', default=False)
     parser.add_argument('--no_wavmix', action='store_true', default=False)
