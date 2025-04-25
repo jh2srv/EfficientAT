@@ -127,9 +127,7 @@ class AudioSetDataset(TorchDataset):
         )
 
         waveform = waveform.numpy()
-        
-        
-        
+                    
         if self.gain_augment:
             waveform = pydub_augment(waveform, self.gain_augment)
             

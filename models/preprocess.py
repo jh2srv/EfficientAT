@@ -1,7 +1,7 @@
 import torch.nn as nn
 import torchaudio
 import torch
-
+import soundfile
 
 class AugmentMelSTFT(nn.Module):
     def __init__(self, n_mels=128, sr=32000, win_length=800, hopsize=320, n_fft=1024, freqm=48, timem=192,
@@ -46,7 +46,7 @@ class AugmentMelSTFT(nn.Module):
         x = (x ** 2).sum(dim=-1)  # power mag
         fmin = self.fmin + torch.randint(self.fmin_aug_range, (1,)).item()
         fmax = self.fmax + self.fmax_aug_range // 2 - torch.randint(self.fmax_aug_range, (1,)).item()
-        # don't augment eval data
+        # don't augment eval data, (not relevant in esc50, same acc)
         if not self.training:
             fmin = self.fmin
             fmax = self.fmax
@@ -142,8 +142,10 @@ class AugmentMelSTFT_v2(nn.Module):
     
 
 
-
-class AugmentMelSTFT_v3(nn.Module):
+#  rewrite AugmentMelSTFT into 2 classes:
+#   - first part with only the stft
+#   - second part: calculate the mel spectrograms from the stft from part 1
+class AugmentMelSTFT_part1(nn.Module):
     def __init__(self, n_mels=128, sr=32000, win_length=800, hopsize=320, n_fft=1024, freqm=48, timem=192,
                  fmin=0.0, fmax=None, fmin_aug_range=10, fmax_aug_range=2000):
         torch.nn.Module.__init__(self)
@@ -177,15 +179,6 @@ class AugmentMelSTFT_v3(nn.Module):
         else:
             self.timem = torchaudio.transforms.TimeMasking(timem, iid_masks=True)
 
-        # set me filter banks as parameters
-        mel_basis, _ = torchaudio.compliance.kaldi.get_mel_banks(self.n_mels,  self.n_fft, self.sr,
-                                        fmin, fmax, vtln_low=100.0, vtln_high=-500., vtln_warp_factor=1.0)
-        
-        mel_basis = torch.nn.functional.pad(mel_basis, (0, 1), mode='constant', value=0)                                    
-        # mel_basis = mel_basis.to(torch.float16)
-        self.filter_banks = nn.Parameter(mel_basis,
-                                        requires_grad=False) # <- can we update this value with gradient descent?))
-
 
     def forward(self, x):
         # preemphasis: high band filter with 5.9 dB per octave
@@ -195,16 +188,53 @@ class AugmentMelSTFT_v3(nn.Module):
                        center=True, normalized=False, window=self.window, return_complex=False)
         
         x = (x ** 2).sum(dim=-1)  # power mag
-        fmin = self.fmin + torch.randint(self.fmin_aug_range, (1,)).item()
-        fmax = self.fmax + self.fmax_aug_range // 2 - torch.randint(self.fmax_aug_range, (1,)).item()
-        # don't augment eval data
-        if not self.training:
-            fmin = self.fmin
-            fmax = self.fmax
-        
-        with torch.cuda.amp.autocast(enabled=False):
-            melspec = torch.matmul(self.filter_banks, x)
+        return x
+    
 
+class AugmentMelSTFT_part2(nn.Module):
+
+    def __init__(self, n_mels=128, sr=32000, win_length=800, hopsize=320, n_fft=1024, freqm=48, timem=192,
+                 fmin=0.0, fmax=None, fmin_aug_range=10, fmax_aug_range=2000):
+        torch.nn.Module.__init__(self)
+        # adapted from: https://github.com/CPJKU/kagglebirds2020/commit/70f8308b39011b09d41eb0f4ace5aa7d2b0e806e
+
+        self.win_length = win_length
+        self.n_mels = n_mels
+        self.n_fft = n_fft
+        self.sr = sr
+        self.fmin = fmin
+        if fmax is None:
+            fmax = sr // 2 - fmax_aug_range // 2
+            print(f"Warning: FMAX is None setting to {fmax} ")
+        self.fmax = fmax
+        self.hopsize = hopsize
+
+        assert fmin_aug_range >= 1, f"fmin_aug_range={fmin_aug_range} should be >=1; 1 means no augmentation"
+        assert fmax_aug_range >= 1, f"fmax_aug_range={fmax_aug_range} should be >=1; 1 means no augmentation"
+        self.fmin_aug_range = fmin_aug_range
+        self.fmax_aug_range = fmax_aug_range
+
+        if freqm == 0:
+            self.freqm = torch.nn.Identity()
+        else:
+            self.freqm = torchaudio.transforms.FrequencyMasking(freqm, iid_masks=True)
+        if timem == 0:
+            self.timem = torch.nn.Identity()
+        else:
+            self.timem = torchaudio.transforms.TimeMasking(timem, iid_masks=True)
+
+        # set me filter banks as parameters
+        mel_basis, _ = torchaudio.compliance.kaldi.get_mel_banks(self.n_mels,  self.n_fft, self.sr,
+                                        fmin, fmax, vtln_low=100.0, vtln_high=-500., vtln_warp_factor=1.0)
+        
+        mel_basis = torch.nn.functional.pad(mel_basis, (0, 1), mode='constant', value=0)                                    
+        # mel_basis = mel_basis.to(torch.float16)
+        self.filter_banks = nn.Parameter(mel_basis,
+                                        requires_grad=False) # <- can we update this value with gradient descent?
+
+    def forward(self, x):                
+        # with torch.cuda.amp.autocast(enabled=False):
+        melspec = torch.matmul(self.filter_banks, x)
         melspec = (melspec + 0.00001).log()
 
         if self.training:
@@ -212,5 +242,4 @@ class AugmentMelSTFT_v3(nn.Module):
             melspec = self.timem(melspec)
 
         melspec = (melspec + 4.5) / 5.  # fast normalization
-
         return melspec
