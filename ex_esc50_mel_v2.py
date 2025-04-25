@@ -25,12 +25,9 @@ class MelModel(nn.Module):
         self.mel = mel
         self.stft = stft
 
+    def mel_requires_grad(self, requires_grad = True):
         for param in self.mel.parameters():
-            param.requires_grad = True
-
-        # for param in self.parameters():
-        #     if not param.requires_grad:
-        #         print(param.shape, param)
+            param.requires_grad = requires_grad
 
     def forward(self, x):
         old_shape = x.size()
@@ -102,12 +99,12 @@ def train(args):
                               head_type=args.head_type, se_dims=args.se_dims,
                               num_classes=50)
     _model.to(device)
-    if args.model_local != '':
-        state_dict = torch.load(f = args.model_local,  map_location=device.type)
-        # state_dict = torch.load(f=pretrained_path)
-        _model.load_state_dict(state_dict)
 
     model = MelModel(_model, stft, mel)
+    if args.model_local != '':
+        state_dict = torch.load(f = args.model_local,  map_location=device)        
+        model.load_state_dict(state_dict)
+
     model.to(device)
 
     # dataloader
@@ -138,7 +135,7 @@ def train(args):
             exp_warmup_linear_down(args.warm_up_len, args.ramp_down_len, args.ramp_down_start, args.last_lr_value)
         scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, schedule_lambda)
     else:
-        optimizer = torch.optim.SGD(model.parameters(), lr=1e-9)
+        optimizer = torch.optim.SGD(model.parameters(), lr=1e-5)
 
     name = None
     accuracy, val_loss = float('NaN'), float('NaN')
@@ -165,19 +162,30 @@ def train(args):
             #                                 1. - lam.reshape(bs)))
 
             # else:
-            y_hat, _ = model(x)
-            samples_loss = F.cross_entropy(y_hat, y, reduction="none")
+            with torch.autograd.detect_anomaly(check_nan=False):
+                y_hat, _ = model(x)
+                # print('-'*30, 'Y_hat_nans')
+                # print(y_hat.isnan().any())
+                # print('-'*30)    
+                        
+                samples_loss = F.cross_entropy(y_hat, y, reduction="none")
+                # loss
+                loss = samples_loss.mean()
+                # print('-'*30, 'loss_nans')
+                # print(loss.isnan().any())
+                # print('-'*30)
+                # append training statistics
+                train_stats['train_loss'].append(loss.detach().cpu().numpy())
 
-            # loss
-            loss = samples_loss.mean()
+                # Update Model
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0e-2, norm_type=2.0)
 
-            # append training statistics
-            train_stats['train_loss'].append(loss.detach().cpu().numpy())
+                optimizer.step()
+                for param in model.mel.parameters():
+                    param.data.clamp_(min = 0.00001, max = 1.1)
 
-            # Update Model
-            loss.backward()
-            optimizer.step()            
-            optimizer.zero_grad()
+                optimizer.zero_grad()
         # Update learning rate
         if ORIGINAL:        
             scheduler.step()
@@ -194,10 +202,10 @@ def train(args):
         # remove previous model (we try to not flood your hard disk) and save latest model
         if name is not None:
             os.remove(os.path.join(wandb.run.dir, name))
-            os.remove(os.path.join(wandb.run.dir, 'mel_' + name))
+            # os.remove(os.path.join(wandb.run.dir, 'mel_' + name))
         name = f"mn{str(width).replace('.', '')}_esc50_epoch_{epoch}_acc_{int(round(accuracy*1000))}.pt"
         torch.save(model.state_dict(), os.path.join(wandb.run.dir, name))
-        torch.save(mel.state_dict(), os.path.join(wandb.run.dir, 'mel_' + name))
+        # torch.save(mel.state_dict(), os.path.join(wandb.run.dir, 'mel_' + name))
 
 
 def _mel_forward(x, mel):
