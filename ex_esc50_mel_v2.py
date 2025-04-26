@@ -25,8 +25,12 @@ class MelModel(nn.Module):
         self.mel = mel
         self.stft = stft
 
-    def mel_requires_grad(self, requires_grad = True):
+    def mel_requires_grad(self, requires_grad = True):        
         for param in self.mel.parameters():
+            param.requires_grad = requires_grad
+
+    def model_requires_grad(self, requires_grad = True):
+        for param in self.model.parameters():
             param.requires_grad = requires_grad
 
     def forward(self, x):
@@ -101,10 +105,24 @@ def train(args):
     _model.to(device)
 
     model = MelModel(_model, stft, mel)
+
     if args.model_local != '':
         state_dict = torch.load(f = args.model_local,  map_location=device)        
         model.load_state_dict(state_dict)
 
+    if args.no_train_mel:            
+        print('Filter banks NOT optimized!')
+        model.mel_requires_grad(requires_grad=False)
+    else:
+        model.mel_requires_grad(requires_grad=True)
+        print('Filter banks optimized!')
+
+    if args.no_train_model:            
+        print('Model NOT optimized!')
+        model.model_requires_grad(requires_grad=False)
+    else:
+        model.model_requires_grad(requires_grad=True)
+        print('Model optimized!')
     model.to(device)
 
     # dataloader
@@ -179,8 +197,6 @@ def train(args):
 
                 # Update Model
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0e-2, norm_type=2.0)
-
                 optimizer.step()
                 for param in model.mel.parameters():
                     param.data.clamp_(min = 0.00001, max = 1.1)
@@ -288,6 +304,8 @@ if __name__ == '__main__':
 
     # custom, different to original repo
     parser.add_argument('--model_local', type=str, default='')
+    parser.add_argument('--no_train_mel', action='store_true', default=False)
+    parser.add_argument('--no_train_model', action='store_true', default=False)
 
     args = parser.parse_args()
     train(args)
