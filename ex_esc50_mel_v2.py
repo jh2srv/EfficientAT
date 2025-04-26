@@ -33,6 +33,13 @@ class MelModel(nn.Module):
         for param in self.model.parameters():
             param.requires_grad = requires_grad
 
+    def train_only_classifier(self):
+        for param in self.model.parameters():
+            param.requires_grad = False
+        for name, param in self.model.named_parameters():
+            if 'classifier' in name:        
+                param.requires_grad = True
+
     def forward(self, x):
         old_shape = x.size()
         # reshape from: batch,1,samples -> batch,samples (1 is number of channels)
@@ -105,24 +112,29 @@ def train(args):
     _model.to(device)
 
     model = MelModel(_model, stft, mel)
-
+    # load saved model
     if args.model_local != '':
         state_dict = torch.load(f = args.model_local,  map_location=device)        
         model.load_state_dict(state_dict)
-
+    # train filter banks
     if args.no_train_mel:            
         print('Filter banks NOT optimized!')
         model.mel_requires_grad(requires_grad=False)
     else:
         model.mel_requires_grad(requires_grad=True)
         print('Filter banks optimized!')
-
+    # train model parameteres
     if args.no_train_model:            
         print('Model NOT optimized!')
         model.model_requires_grad(requires_grad=False)
     else:
         model.model_requires_grad(requires_grad=True)
         print('Model optimized!')
+    # train only classfier
+    if args.train_only_classifier:
+        model.train_only_classifier()
+
+
     model.to(device)
 
     # dataloader
@@ -306,6 +318,7 @@ if __name__ == '__main__':
     parser.add_argument('--model_local', type=str, default='')
     parser.add_argument('--no_train_mel', action='store_true', default=False)
     parser.add_argument('--no_train_model', action='store_true', default=False)
+    parser.add_argument('--train_only_classifier', action='store_true', default=False)
 
     args = parser.parse_args()
     train(args)
