@@ -11,11 +11,9 @@ import torch.nn.functional as F
 from datasets.esc50 import get_test_set, get_training_set
 from models.mn.model import get_model as get_mobilenet
 from models.dymn.model import get_model as get_dymn
-from models.preprocess import AugmentMelSTFT_part1, AugmentMelSTFT_part2
+from models.preprocess import AugmentMelSTFT_part1, AugmentMelSTFT_part2, AugmentMelSTFT_part2_v2
 from helpers.init import worker_init_fn
 from helpers.utils import NAME_TO_WIDTH, exp_warmup_linear_down, mixup
-
-
 from torch import nn
 
 class MelModel(nn.Module):
@@ -79,8 +77,8 @@ def train(args):
                         fmax_aug_range=args.fmax_aug_range
                         )
 
-
-    mel = AugmentMelSTFT_part2(n_mels=args.n_mels,
+    # AugmentMelSTFT_part2_v2 AugmentMelSTFT_part2
+    mel = AugmentMelSTFT_part2_v2(n_mels=args.n_mels,
                          sr=args.resample_rate,
                          win_length=args.window_size,
                          hopsize=args.hop_size,
@@ -93,9 +91,6 @@ def train(args):
                          fmax_aug_range=args.fmax_aug_range
                          )
     
-    stft.to(device)
-    mel.to(device)
-
 
     # load prediction model
     model_name = args.model_name
@@ -109,6 +104,9 @@ def train(args):
         _model = get_mobilenet(width_mult=width, pretrained_name=pretrained_name,
                               head_type=args.head_type, se_dims=args.se_dims,
                               num_classes=50)
+    
+    stft.to(device)
+    mel.to(device)
     _model.to(device)
 
     model = MelModel(_model, stft, mel)
@@ -132,9 +130,12 @@ def train(args):
         print('Model optimized!')
     # train only classfier
     if args.train_only_classifier:
+        print('train only classifier')
         model.train_only_classifier()
 
-
+    # # DEBUG : check we are really training all
+    # for param in model.parameters():
+    #     param.requires_grad = True
     model.to(device)
 
     # dataloader
@@ -192,26 +193,20 @@ def train(args):
             #                                 1. - lam.reshape(bs)))
 
             # else:
-            with torch.autograd.detect_anomaly(check_nan=False):
-                y_hat, _ = model(x)
-                # print('-'*30, 'Y_hat_nans')
-                # print(y_hat.isnan().any())
-                # print('-'*30)    
-                        
-                samples_loss = F.cross_entropy(y_hat, y, reduction="none")
-                # loss
-                loss = samples_loss.mean()
-                # print('-'*30, 'loss_nans')
-                # print(loss.isnan().any())
-                # print('-'*30)
-                # append training statistics
-                train_stats['train_loss'].append(loss.detach().cpu().numpy())
+            # with torch.autograd.detect_anomaly(check_nan=False):
+            y_hat, _ = model(x)
+                    
+            samples_loss = F.cross_entropy(y_hat, y, reduction="none")
+            # loss
+            loss = samples_loss.mean()
+            # append training statistics
+            train_stats['train_loss'].append(loss.detach().cpu().numpy())
 
-                # Update Model
-                loss.backward()
-                optimizer.step()
-                for param in model.mel.parameters():
-                    param.data.clamp_(min = 0.00001, max = 1.1)
+            # Update Model
+            loss.backward()
+            optimizer.step()
+            for param in model.mel.parameters():
+                param.data.clamp_(min = 0.00001, max = 1.1)
 
                 optimizer.zero_grad()
         # Update learning rate
@@ -230,20 +225,8 @@ def train(args):
         # remove previous model (we try to not flood your hard disk) and save latest model
         if name is not None:
             os.remove(os.path.join(wandb.run.dir, name))
-            # os.remove(os.path.join(wandb.run.dir, 'mel_' + name))
         name = f"mn{str(width).replace('.', '')}_esc50_epoch_{epoch}_acc_{int(round(accuracy*1000))}.pt"
         torch.save(model.state_dict(), os.path.join(wandb.run.dir, name))
-        # torch.save(mel.state_dict(), os.path.join(wandb.run.dir, 'mel_' + name))
-
-
-def _mel_forward(x, mel):
-    old_shape = x.size()
-    # reshape from: batch,1,samples -> batch,samples (1 is number of channels)
-    x = x.reshape(-1, old_shape[2])
-    x = mel(x)
-    x = x.reshape(old_shape[0], old_shape[1], x.shape[1], x.shape[2])
-    return x
-
 
 def _test(model, eval_loader, device):
     model.eval()
