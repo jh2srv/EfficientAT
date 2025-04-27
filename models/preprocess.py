@@ -214,7 +214,9 @@ class AugmentMelSTFT_part2_v2(nn.Module):
         mel_basis, _ = torchaudio.compliance.kaldi.get_mel_banks(self.n_mels,  self.n_fft, self.sr,
                                         fmin, fmax, vtln_low=100.0, vtln_high=-500., vtln_warp_factor=1.0)
         
-        mel_basis = torch.nn.functional.pad(mel_basis, (0, 1), mode='constant', value=0)                                    
+        mel_basis = torch.nn.functional.pad(mel_basis, (0, 1), mode='constant', value=0) 
+        # mel_basis = 0.7*mel_basis + 0.29*torch.rand(mel_basis.size())
+        mel_basis = mel_basis * (0.3*torch.rand(mel_basis.size()) + 0.69)
         # apply the inverse of the signoid function
         a_sigmoid_banks = torch.log(mel_basis /  (1.0 - mel_basis))
         self.afilter_banks = nn.Parameter(a_sigmoid_banks,

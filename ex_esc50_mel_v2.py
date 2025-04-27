@@ -108,7 +108,7 @@ def train(args):
     stft.to(device)
     mel.to(device)
     _model.to(device)
-
+    torch.save(mel.state_dict(), '/content/mel_start.pt')
     model = MelModel(_model, stft, mel)
     # load saved model
     if args.model_local != '':
@@ -166,7 +166,7 @@ def train(args):
             exp_warmup_linear_down(args.warm_up_len, args.ramp_down_len, args.ramp_down_start, args.last_lr_value)
         scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, schedule_lambda)
     else:
-        optimizer = torch.optim.SGD(model.parameters(), lr=1e-5)
+        optimizer = torch.optim.SGD(model.parameters(), lr=1e-3)
 
     name = None
     accuracy, val_loss = float('NaN'), float('NaN')
@@ -205,10 +205,10 @@ def train(args):
             # Update Model
             loss.backward()
             optimizer.step()
-            for param in model.mel.parameters():
-                param.data.clamp_(min = 0.00001, max = 1.1)
+            # for param in model.mel.parameters():
+            #     param.data.clamp_(min = 0.00001, max = 1.1)
 
-                optimizer.zero_grad()
+            optimizer.zero_grad()
         # Update learning rate
         if ORIGINAL:        
             scheduler.step()
