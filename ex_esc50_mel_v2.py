@@ -204,6 +204,13 @@ def train(args):
 
             # Update Model
             loss.backward()
+
+            for p in model.mel.parameters():
+                # print(f'grad_norm={p.grad.norm().item()}')
+                if p.grad.norm() < 0.1:
+                    # print(p.grad.norm())
+                    torch.nn.utils.clip_grad_norm_(p, 0.1)
+
             optimizer.step()
             # for param in model.mel.parameters():
             #     param.data.clamp_(min = 0.00001, max = 1.1)
