@@ -218,14 +218,16 @@ class AugmentMelSTFT_part2_v2(nn.Module):
         # mel_basis = 0.7*mel_basis + 0.29*torch.rand(mel_basis.size())
         mel_basis = mel_basis * (0.3*torch.rand(mel_basis.size()) + 0.69)
         # apply the inverse of the signoid function
-        a_sigmoid_banks = torch.log(mel_basis /  (1.0 - mel_basis))
-        self.afilter_banks = nn.Parameter(a_sigmoid_banks,
+        # a_sigmoid_banks = torch.log(mel_basis /  (1.0 - mel_basis))
+        self.filter_banks = nn.Parameter(mel_basis,
                                         requires_grad = True) # <- can we update this value with gradient descent?
 
     def forward(self, x):                
         # with torch.cuda.amp.autocast(enabled=False):
-        afilter_banks = torch.sigmoid(self.afilter_banks)
-        melspec = torch.matmul(afilter_banks, x)
+        # afilter_banks = torch.sigmoid(self.afilter_banks)
+        # melspec = torch.matmul(afilter_banks, x)        
+        filter_banks = torch.relu(self.filter_banks)
+        melspec = torch.matmul(filter_banks, x)
         melspec = (melspec + 0.00001).log()
 
         # if self.training:
