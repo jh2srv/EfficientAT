@@ -221,24 +221,31 @@ class AugmentMelSTFT_part2_v2(nn.Module):
         # a_sigmoid_banks = torch.log(mel_basis /  (1.0 - mel_basis))
 
         # apply the inverse of tanh() + 1.0) / 2.0
-        mel_basis = torch.atanh(2.0*mel_basis - 1.0)
+        # mel_basis = torch.atanh(2.0*mel_basis - 1.0)
+
+        try:
+            model_path = '/content/last_run.pt'
+            state_dict = torch.load(model_path, map_location=torch.device('cpu'))
+            mel_basis = state_dict['mel.filter_banks']
+        except:
+            print('No model saved to fetch banks')
+
+
 
         self.filter_banks = nn.Parameter(mel_basis,
                                         requires_grad = True) # <- can we update this value with gradient descent?
         
-        # self.activation = nn.ReLU()        
-        self.activation = nn.Tanh()
+        self.activation = nn.ReLU()        
+        # self.activation = nn.Tanh()
 
         ## will not work:
         # self.activation = nn.Tanh()
         # self.activation = nn.LeakyReLU(0.1)
 
     def forward(self, x):                
-        # with torch.cuda.amp.autocast(enabled=False):
-        # afilter_banks = torch.sigmoid(self.afilter_banks)
-        # melspec = torch.matmul(afilter_banks, x)
-        filter_banks = (self.activation(self.filter_banks) + 1.0) / 2.0
-        # filter_banks = self.activation(self.filter_banks)
+        # with torch.cuda.amp.autocast(enabled=False):        
+        # filter_banks = (self.activation(self.filter_banks) + 1.0) / 2.0
+        filter_banks = self.activation(self.filter_banks)
         melspec = torch.matmul(filter_banks, x)
         melspec = (melspec + 0.00001).log()
 
