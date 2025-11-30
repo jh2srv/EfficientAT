@@ -2,6 +2,7 @@ import torch.nn as nn
 import torchaudio
 import torch
 import soundfile
+import pathlib
 
 class AugmentMelSTFT(nn.Module):
     def __init__(self, n_mels=128, sr=32000, win_length=800, hopsize=320, n_fft=1024, freqm=48, timem=192,
@@ -44,7 +45,6 @@ class AugmentMelSTFT(nn.Module):
         x = torch.stft(x, self.n_fft, hop_length=self.hopsize, win_length=self.win_length,
                        center=True, normalized=False, window=self.window, return_complex=False)
         x = (x ** 2).sum(dim=-1)  # power mag
-        
         fmin = self.fmin + torch.randint(self.fmin_aug_range, (1,)).item()
         fmax = self.fmax + self.fmax_aug_range // 2 - torch.randint(self.fmax_aug_range, (1,)).item()
         # don't augment eval data, (not relevant in esc50, same acc)
@@ -116,8 +116,7 @@ class AugmentMelSTFT_part1(nn.Module):
         x = torch.stft(x, self.n_fft, hop_length=self.hopsize, win_length=self.win_length,
                        center=True, normalized=False, window=self.window, return_complex=False)
         
-        # torch.Size([128, 513, 500, 2])
-        x = (x ** 2).sum(dim=-1)  # power mag, dimensions are [batch, f, t, 2] 2-> real iamg
+        x = (x ** 2).sum(dim=-1)  # power mag
         return x
     
 
@@ -216,39 +215,26 @@ class AugmentMelSTFT_part2_v2(nn.Module):
         mel_basis, _ = torchaudio.compliance.kaldi.get_mel_banks(self.n_mels,  self.n_fft, self.sr,
                                         fmin, fmax, vtln_low=100.0, vtln_high=-500., vtln_warp_factor=1.0)
         
-        # add a column of ceros at the end:
-        mel_basis = torch.nn.functional.pad(mel_basis, (0, 1), mode='constant', value=0) 
+        # model_path = list(pathlib.Path('/content/EfficientAT/wandb/latest-run/files').glob('*.pt'))[0]
+        model_path = '/content/last_run.pt'
+        state_dict = torch.load(model_path, map_location=torch.device('cpu'))
+        mel_basis = state_dict['mel.filter_banks']
+
+        # mel_basis = torch.nn.functional.pad(mel_basis, (0, 1), mode='constant', value=0) 
+        # mel_basis = mel_basis * (0.3*torch.rand(mel_basis.size()) + 0.69)
+        
         # mel_basis = 0.7*mel_basis + 0.29*torch.rand(mel_basis.size())
-        mel_basis = mel_basis * (0.3*torch.rand(mel_basis.size()) + 0.69)
+        
         # apply the inverse of the signoid function
         # a_sigmoid_banks = torch.log(mel_basis /  (1.0 - mel_basis))
-
-        # apply the inverse of tanh() + 1.0) / 2.0
-        # mel_basis = torch.atanh(2.0*mel_basis - 1.0)
-
-        try:
-            model_path = '/content/last_run.pt'
-            state_dict = torch.load(model_path, map_location=torch.device('cpu'))
-            mel_basis = state_dict['mel.filter_banks']
-        except:
-            print('No model saved to fetch banks')
-
-
-
         self.filter_banks = nn.Parameter(mel_basis,
                                         requires_grad = True) # <- can we update this value with gradient descent?
-        
-        self.activation = nn.ReLU()        
-        # self.activation = nn.Tanh()
-
-        ## will not work:
-        # self.activation = nn.Tanh()
-        # self.activation = nn.LeakyReLU(0.1)
 
     def forward(self, x):                
-        # with torch.cuda.amp.autocast(enabled=False):        
-        # filter_banks = (self.activation(self.filter_banks) + 1.0) / 2.0
-        filter_banks = self.activation(self.filter_banks)
+        # with torch.cuda.amp.autocast(enabled=False):
+        # afilter_banks = torch.sigmoid(self.afilter_banks)
+        # melspec = torch.matmul(afilter_banks, x)        
+        filter_banks = torch.relu(self.filter_banks)
         melspec = torch.matmul(filter_banks, x)
         melspec = (melspec + 0.00001).log()
 

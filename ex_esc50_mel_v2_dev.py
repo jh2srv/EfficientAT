@@ -92,7 +92,7 @@ def train(args):
                          )
     
 
-    # load prediction model6
+    # load prediction model
     model_name = args.model_name
     pretrained_name = model_name if args.pretrained else None
     width = NAME_TO_WIDTH(model_name) if model_name and args.pretrained else args.model_width
@@ -234,6 +234,7 @@ def train(args):
             os.remove(os.path.join(wandb.run.dir, name))
         name = f"mn{str(width).replace('.', '')}_esc50_epoch_{epoch}_acc_{int(round(accuracy*1000))}.pt"
         torch.save(model.state_dict(), os.path.join(wandb.run.dir, name))
+        torch.save(model.state_dict(), '/content/last_run.pt')
 
 def _test(model, eval_loader, device):
     model.eval()
